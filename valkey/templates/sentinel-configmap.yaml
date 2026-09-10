@@ -81,7 +81,9 @@ data:
     sentinel_cli() {
       REDISCLI_AUTH="$SENTINEL_PASSWORD" \
       valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} \
-        --user sentinel \
+        {{- if ne .Values.replica.sentinel.aclUser "default" }}
+        --user {{ .Values.replica.sentinel.aclUser }} \
+        {{- end }}
         -t 2 -p "{{ $sentinelPort }}" "$@"
     }
 
@@ -204,10 +206,18 @@ data:
     MONITOR_PASSWORD_ESCAPED=$(escape_config_arg "$MONITOR_PASSWORD")
     {{- end }}
     cat >> "$SENTINEL_CONF" << EOF
+    {{- if eq .Values.replica.sentinel.aclUser "default" }}
+
+    # The password is on the default user, so a client that can only send a
+    # password reaches Sentinel. Anything that can reach the port and knows the
+    # password then has full Sentinel access, which is what requirepass means.
+    user default on "#${SENTINEL_PASSHASH_ESCAPED}" ~* &* +@all
+    {{- else }}
 
     user default off
     user sentinel on "#${SENTINEL_PASSHASH_ESCAPED}" ~* &* +@all
     sentinel sentinel-user sentinel
+    {{- end }}
     sentinel sentinel-pass "${SENTINEL_PASSWORD_ESCAPED}"
 
     {{- if .Values.auth.enabled }}
@@ -297,7 +307,7 @@ data:
 
     PASSWORD=$(cat /sentinel-auth/existing-password 2>/dev/null || cat /sentinel-auth/inline-password 2>/dev/null)
 
-    REPLY=$(REDISCLI_AUTH="$PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+    REPLY=$(REDISCLI_AUTH="$PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ include "valkey.sentinel.cliUserFlag" . }} \
       -t 2 -p {{ $sentinelPort }} ping)
 
     [ "$REPLY" = "PONG" ]
@@ -407,7 +417,7 @@ data:
     fi
 
     log "This pod is the master, asking Sentinel to fail over before shutting down"
-    REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }} --user sentinel \
+    REDISCLI_AUTH="$SENTINEL_PASSWORD" valkey-cli {{ include "valkey.sentinel.cliTlsFlags" . }}{{ include "valkey.sentinel.cliUserFlag" . }} \
       -t 2 -h {{ include "valkey.sentinel.headlessServiceName" . }} -p {{ .Values.replica.sentinel.port }} sentinel failover {{ $masterSet }} >/dev/null 2>&1 || {
         log "WARN: the failover request failed, continuing with the shutdown"
         exit 0

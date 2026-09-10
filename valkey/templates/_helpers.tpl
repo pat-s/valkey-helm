@@ -219,6 +219,19 @@ valkey-cli TLS flags shared by the Sentinel scripts and probes
 {{- end -}}
 
 {{/*
+The user the Sentinel scripts, probes and printed commands authenticate as on
+the Sentinel port.
+
+With the default aclUser of "sentinel" this is an explicit --user, matching the
+dedicated ACL user in sentinel.conf. With "default" it expands to nothing, so
+valkey-cli sends a bare AUTH <password> and lands on the default user, which is
+the only thing clients that cannot send a username are able to do.
+*/}}
+{{- define "valkey.sentinel.cliUserFlag" -}}
+{{- if ne .Values.replica.sentinel.aclUser "default" }} --user {{ .Values.replica.sentinel.aclUser }}{{ end -}}
+{{- end -}}
+
+{{/*
 valkey-cli TLS flags for the commands printed after an install. Those run from
 a shell rather than inside a chart pod, so the files are the operator's own
 copies of what tls.existingSecret holds, and the names are shown as

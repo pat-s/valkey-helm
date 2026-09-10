@@ -411,6 +411,13 @@
                 "sentinel": {
                     "type": "object",
                     "properties": {
+                        "aclUser": {
+                            "type": "string",
+                            "enum": [
+                                "sentinel",
+                                "default"
+                            ]
+                        },
                         "downAfterMilliseconds": {
                             "type": "integer"
                         },
