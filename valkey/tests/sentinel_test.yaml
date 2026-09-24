@@ -984,3 +984,109 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: should keep the dedicated sentinel ACL user by default
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default off'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user sentinel on "#\$\{SENTINEL_PASSHASH_ESCAPED\}" ~\* &\* \+@all'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-user sentinel'
+
+  - it: should put the password on the default user when aclUser is default
+    set:
+      replica.sentinel.aclUser: default
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      # A client that can only send a password authenticates as default, so the
+      # password has to belong to that user for such a client to reach Sentinel.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default on "#\$\{SENTINEL_PASSHASH_ESCAPED\}" ~\* &\* \+@all'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user default off'
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'user sentinel on'
+      # The peers authenticate with the password alone, so the username
+      # directive must be gone while the password directive stays.
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-user'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel sentinel-pass "\$\{SENTINEL_PASSWORD_ESCAPED\}"'
+
+  - it: should not pass a username on the sentinel port when aclUser is default
+    set:
+      replica.sentinel.aclUser: default
+      auth.enabled: true
+      replica.replicationUser: replicator
+      auth.aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          password: "pw"
+        replicator:
+          permissions: "~* &* +psync +replconf"
+          password: "replpw"
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '--user sentinel'
+      - notMatchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: '--user sentinel'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: '--user sentinel'
+      # aclUser governs the Sentinel port only. The monitor user, which reaches
+      # the Valkey nodes, must keep its own username.
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: '--user "replicator"'
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'sentinel auth-user \$\{MASTER_SET\} replicator'
+
+  - it: should not pass a username when the init container asks sentinel for the master
+    set:
+      replica.sentinel.aclUser: default
+    template: templates/init_config.yaml
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'sentinel get-master-addr-by-name mymaster'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: '--user sentinel'
+
+  - it: should still keep the credentials out of the process list when aclUser is default
+    set:
+      replica.sentinel.aclUser: default
+    template: templates/sentinel-configmap.yaml
+    asserts:
+      - matchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: 'REDISCLI_AUTH='
+      - notMatchRegex:
+          path: data["sentinel-start.sh"]
+          pattern: ' -a "\$'
+      - notMatchRegex:
+          path: data["sentinel-ping.sh"]
+          pattern: ' -a "\$'
+      - notMatchRegex:
+          path: data["sentinel-prestop.sh"]
+          pattern: ' -a "\$'
+
+  - it: should reject an unknown aclUser
+    set:
+      replica.sentinel.aclUser: admin
+    asserts:
+      - failedTemplate: {}

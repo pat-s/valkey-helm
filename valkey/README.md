@@ -102,8 +102,11 @@ Most client libraries do this for you:
 ```python
 from valkey.sentinel import Sentinel
 
-sentinel = Sentinel([("valkey-sentinel", 26379)], password="...")
-master = sentinel.master_for("mymaster")
+sentinel = Sentinel(
+    [("valkey-sentinel", 26379)],
+    sentinel_kwargs={"username": "sentinel", "password": "<sentinel password>"},
+)
+master = sentinel.master_for("mymaster", username="<valkey user>", password="<valkey password>")
 master.set("key", "value")
 ```
 
@@ -114,6 +117,12 @@ Writes sent to the `valkey` service directly may land on a replica and fail with
 Set `replica.sentinel.password` to a credential used only for the Sentinel endpoint, even when Valkey authentication is disabled.
 With `auth.usersExistingSecret`, store that credential under `replica.sentinel.passwordKey` (default: `sentinel`) instead.
 Valkey user passwords are deliberately not accepted by Sentinel, so restrictions on application ACL users cannot be bypassed through Sentinel commands.
+
+By default the credential belongs to a dedicated `sentinel` ACL user and the default user is switched off, so a client has to send both a username and a password.
+Some clients can send only a password: self-hosted GitLab, for instance, accepts a Sentinel password on every one of its deployment paths but has no field for a username, and `AUTH <password>` authenticates as `default`.
+For those, set `replica.sentinel.aclUser: default` to attach the password to the default user instead, which is the `requirepass` equivalent.
+Anything that reaches the Sentinel port and knows the password then has full Sentinel access, so keep the default wherever the client supports a username.
+The password is still hashed inside the container at startup either way, so it never appears in values or in a rendered ConfigMap.
 Sentinel reaches the Valkey nodes as `replica.sentinel.monitorUser`, which defaults to `replica.replicationUser`.
 That user must be allowed to promote a replica, otherwise every failover aborts with `-failover-abort-slave-timeout`.
 A starting pod asks the other nodes which of them is the primary as the same user, rather than as `replica.replicationUser`, whose documented minimum cannot run `INFO`.

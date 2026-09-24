@@ -349,6 +349,19 @@ replica:
     # and, because the same user replicates, +psync +replconf
     monitorUser: ""
 
+    # User the Sentinel password is attached to on the Sentinel port.
+    #
+    #   sentinel: the password belongs to a dedicated "sentinel" ACL user and
+    #             the default user is switched off. Clients have to send both a
+    #             username and a password.
+    #   default:  the password belongs to the default user, the requirepass
+    #             equivalent. Use this for clients that can send a password but
+    #             no username, such as self-hosted GitLab, whose Sentinel
+    #             configuration accepts a password only. Anything that reaches
+    #             the port and knows the password then has full Sentinel
+    #             access, so prefer "sentinel" wherever the client supports it.
+    aclUser: sentinel
+
     # Dedicated password for Sentinel's own ACL.
     # Do not reuse a Valkey user password because Sentinel permissions are independent from Valkey ACLs.
     # This password is required whenever Sentinel is enabled.
